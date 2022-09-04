@@ -16,7 +16,19 @@ library(precrec)
 source("utils.R")
 ```
 
-# downsample tcga
+#utils and loading data
+```{r}
+proj = "tcga_1536_200"
+
+fd <- read.csv(sprintf("../sig_label_%s_feature_dict.csv",proj)) %>% arrange(X0)
+pm <- read.csv(sprintf("../sig_label_%s_patient_mapping.csv",proj))
+p2c <- read.csv(sprintf("../sig_label_%s_pattern2col.csv",proj)) %>% arrange(X0)
+embeddings <- read.csv(sprintf("../sig_label_%s_embeddings.csv",proj))[,-1]
+rownames(embeddings) <- fd$X
+rownames(embeddings)[1:1536] <- p2c$X
+```
+
+# downsample TCGA
 ```{r}
 wes_tcga_sig_label_mut <- read.table("../data/TCGA_mutation_classes_signature_annotations_filtered.tsv", sep = "\t", header = T, quote = "")
 table(wes_tcga_sig_label_mut$sig)
