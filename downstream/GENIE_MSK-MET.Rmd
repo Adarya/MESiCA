@@ -1,0 +1,341 @@
+---
+title: "Predictions of MESiCA in MSK-MET and GENIE samples"
+author: "Adar Yaacov"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(reshape2)
+source("utils.R")
+
+```
+
+#utils and loading data
+```{r}
+proj = "tcga_1536_200"
+
+fd <- read.csv(sprintf("../sig_label_%s_feature_dict.csv",proj)) %>% arrange(X0)
+pm <- read.csv(sprintf("../sig_label_%s_patient_mapping.csv",proj))
+p2c <- read.csv(sprintf("../sig_label_%s_pattern2col.csv",proj)) %>% arrange(X0)
+embeddings <- read.csv(sprintf("../sig_label_%s_embeddings.csv",proj))[,-1]
+rownames(embeddings) <- fd$X
+rownames(embeddings)[1:1536] <- p2c$X
+```
+
+# MSK-MET
+```{r data loading msk-impact2017 and msk-met}
+
+#MSK-IMPACT 2017 
+msk2017_clin <- read.csv("../data/msk_impact_2017/data_clinical_sample.csv", 
+                           check.names = F, header = T)
+msk2017_clin <- msk2017_clin %>% left_join(read.csv("../data/msk_impact_2017/data_clinical_patient.csv", check.names = F, header = T),by = "ן»¿PATIENT_ID")
+colnames(msk2017_clin)[1] <- "PATIENT_ID"
+msk2017_clin <- msk2017_clin %>% mutate(OS = as.numeric(substr(OS_STATUS,1,1)))
+
+#MSK-MET 2021
+msk_met <- read.csv("../data/MKS_MET/msk_met_2021/data_mutations.csv") 
+msk_met_clinical <- left_join(read.table("../data/MKS_MET/msk_met_2021/data_clinical_sample.txt", sep = "\t", header = T, quote = ""),
+                            read.table("../data/MKS_MET/msk_met_2021/data_clinical_patient.txt", sep = "\t", header = T, quote = ""),
+                            by = "PATIENT_ID")
+
+msk_met_clinical$OS <- as.numeric(substr(msk_met_clinical$OS_STATUS,1,1))
+
+#filter redundant samples
+msk_met_clinical_F <- msk_met_clinical %>% 
+  filter(!SAMPLE_ID %in% c(msk2017_clin$SAMPLE_ID, msk_immuno_clinical$SAMPLE_ID))
+```
+
+```{r process mutations}
+msk_met_mut <- msk_met %>% 
+  filter(Tumor_Sample_Barcode %in% msk_met_clinical_F$SAMPLE_ID) %>%
+  filter(Variant_Type == "SNP")
+
+msk_met_mut <- create_muts(msk_met_mut)
+
+mut_num_per_sample_msk_met <- as.data.frame(table(msk_met_mut$Tumor_Sample_Barcode))
+table(mut_num_per_sample_msk_met$Freq > 3)
+
+preds_agg_mskmet_all_list <- cos_pred_fun_efficient(sig_labels, 
+                                                    unique(msk_met_mut$Tumor_Sample_Barcode), 
+                                                    msk_met_mut,
+                                                    creating_muts = FALSE, 
+                                                    vep = TRUE, 
+                                                    emb_len = ncol(embeddings))
+
+preds_agg_mskmet_all <- preds_agg_mskmet_all_list[[3]]
+preds_agg_mskmet_all <- add_pred(preds_agg_mskmet_all) %>% 
+  left_join(mut_num_per_sample_msk_met, by = c("sample"="Var1")) %>%
+  left_join(msk_met_clinical_F[,c("SAMPLE_ID","CANCER_TYPE")], by = c("sample"="SAMPLE_ID"))
+```
+
+#mutation categories
+```{r}
+preds_agg_mskmet_all_mutCat <- preds_agg_mskmet_all %>%
+  mutate(mutCat = ifelse(Freq < 4, "1-3","else"))
+
+preds_agg_mskmet_all_mutCat$mutCat <- ifelse(preds_agg_mskmet_all_mutCat$Freq > 3 &
+                                              preds_agg_mskmet_all_mutCat$Freq < 8, 
+                                            "4-7",preds_agg_mskmet_all_mutCat$mutCat)
+
+preds_agg_mskmet_all_mutCat$mutCat <- ifelse(preds_agg_mskmet_all_mutCat$Freq > 7 &
+                                              preds_agg_mskmet_all_mutCat$Freq < 13, 
+                                            "8-12",preds_agg_mskmet_all_mutCat$mutCat)
+
+preds_agg_mskmet_all_mutCat$mutCat <- ifelse(preds_agg_mskmet_all_mutCat$Freq > 12 &
+                                              preds_agg_mskmet_all_mutCat$Freq < 21, 
+                                            "13-20",preds_agg_mskmet_all_mutCat$mutCat)
+
+preds_agg_mskmet_all_mutCat$mutCat <- ifelse(preds_agg_mskmet_all_mutCat$Freq > 20, 
+                                            ">20",preds_agg_mskmet_all_mutCat$mutCat)
+
+```
+
+```{r}
+# tiff("figures/mskmet_mut_num_categories.tiff", res = 300, width = 640, height = 640)
+ggplot(preds_agg_mskmet_all_mutCat, aes(x=factor(mutCat, levels = c("1-3","4-7","8-12","13-20",">20")))) + 
+  geom_bar(width = 0.95) + theme_classic() + xlab("Number of mutations") + 
+  scale_y_continuous("Number of samples",expand = c(0, 0)) + 
+  geom_text(stat='count', aes(label=..count..), hjust = 0.5, vjust=1.3, angle=0, color="white", size = 3) + 
+  theme(text = element_text(face = "bold", size = 12),
+        axis.text.y = element_blank(),
+        plot.margin = margin(0,0.0,0,0, "cm"))
+# dev.off()
+```
+
+#sig prop per cancer type
+```{r}
+num_per_cancer_type_genie <- as.data.frame(table(preds_agg_mskmet_all$CANCER_TYPE))
+
+a <- preds_agg_mskmet_all %>% 
+  filter(CANCER_TYPE %in% levels & pred !="other" & Freq > 3) %>%
+  ggplot(
+    aes(x=factor(`CANCER_TYPE`, levels = levels), fill=pred)) + geom_bar(position = "fill") + 
+  scale_fill_manual(values=c("#55DDE0", "#33658A", "#C77CFF", "#F6AE2D", "#F26419", "#999999",
+                               "skyblue2", "#F8766D","#00A9FF")) +
+  scale_y_continuous(name = NULL, expand = c(0, 0)) + xlab(NULL)+
+  theme_classic() + theme(
+    legend.title = element_blank(),
+    plot.margin = margin(0,0.0,0,0, "cm"),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.3)
+    ) + 
+  coord_flip()
+```
+
+# clinical utilities - survival analysis
+```{r}
+msk_met_clinical_F_s <- msk_met_clinical_F %>% 
+  left_join(preds_agg_mskmet_all[,-13], by = c("SAMPLE_ID"="sample"))
+
+msk_met_clinical_F_s$TMB <- msk_met_clinical_F_s$TMB_NONSYNONYMOUS
+```
+
+#mela - uv
+```{r}
+proj = "Melanoma"
+
+mela_met_surv <- ggsurvplot(
+    survfit(Surv(OS_MONTHS, OS) ~ UV, data = msk_met_clinical_F_s %>% filter(CANCER_TYPE == proj & Freq > 3)), # survfit object with calculated statistics.
+    size = 1.5,
+    pval = T,             # show p-value of log-rank test.
+    conf.int = F,         # show confidence intervals for 
+    palette = c("orange", "skyblue"),#  "blue"),
+    xlab = "Time in months",   # customize X axis label.
+    ggtheme = theme_classic(base_size = 25, ), # customize plot and risk table with a theme.
+    legend.labs = c("UV-", "UV+"),
+    conf.int.style = "step",  # customize style of confidence intervals
+)
+
+mv <- coxph(Surv(OS_MONTHS, OS) ~ UV + TMB + SAMPLE_TYPE + FGA, 
+            data = msk_met_clinical_F_s %>% filter(CANCER_TYPE == proj& Freq > 3))
+
+mela_met_multi <- ggforest(mv, data = msk_met_clinical_F_s %>% filter(CANCER_TYPE == proj& Freq > 3), fontsize = 1)
+```
+
+#nsclc - tobacco
+```{r}
+proj = "Non-Small Cell Lung Cancer"
+
+tbc_met_surv <- ggsurvplot(
+    survfit(Surv(OS_MONTHS, OS) ~ Tobacco, data = msk_met_clinical_F_s %>% filter(CANCER_TYPE == proj & Freq > 11)), # survfit object with calculated statistics.
+    size = 1.5,
+    pval = T,             # show p-value of log-rank test.
+    conf.int = F,         # show confidence intervals for 
+    palette = c("orange", "skyblue"),#  "blue"),
+    xlab = "Time in months",   # customize X axis label.
+    ggtheme = theme_classic(base_size = 25, ), # customize plot and risk table with a theme.
+    legend.labs = c("UV-", "UV+"),
+    conf.int.style = "step",  # customize style of confidence intervals
+)
+
+mv <- coxph(Surv(OS_MONTHS, OS) ~ Tobacco + TMB + SAMPLE_TYPE + FGA, 
+            data = msk_met_clinical_F_s %>% filter(CANCER_TYPE == proj& Freq > 11))
+
+tbc_met_multi <- ggforest(mv, data = msk_met_clinical_F_s %>% filter(CANCER_TYPE == proj& Freq > 11), fontsize = 1)
+```
+
+#hnsc - apobec
+```{r}
+proj = "Head and Neck Cancer"
+
+ggsurvplot(
+    survfit(Surv(OS_MONTHS, OS) ~ APOBEC, data = msk_met_clinical_F_s %>% filter(CANCER_TYPE == proj & Freq > 3)), # survfit object with calculated statistics.
+    size = 1.5,
+    pval = T,             # show p-value of log-rank test.
+    conf.int = F,         # show confidence intervals for 
+    palette = c("orange", "skyblue"),#  "blue"),
+    xlab = "Time in months",   # customize X axis label.
+    ggtheme = theme_classic(base_size = 25, ), # customize plot and risk table with a theme.
+    legend.labs = c("APOBEC-", "APOBEC+"),
+    conf.int.style = "step",  # customize style of confidence intervals
+)
+
+mv <- coxph(Surv(OS_MONTHS, OS) ~ APOBEC + TMB + SAMPLE_TYPE + FGA, 
+            data = msk_met_clinical_F_s %>% filter(CANCER_TYPE == proj& Freq > 3))
+
+ggforest(mv, data = msk_met_clinical_F_s %>% filter(CANCER_TYPE == proj& Freq > 3), fontsize = 1)
+```
+
+
+# GENIE ! 
+```{r data loading GENIE}
+genie <- read.table("../data/genie/data_mutations_extended.txt", sep = "\t", header = T, quote = "", check.names = F)
+length(unique(genie$Tumor_Sample_Barcode))
+
+genie_clinical <- left_join(read.table("../data/genie/data_clinical_sample.txt", sep = "\t", header = T, quote = ""),
+                            read.table("../data/genie/data_clinical_patient.txt", sep = "\t", header = T, quote = ""),
+                            by = "PATIENT_ID")
+
+#filter redundant samples
+genie_clinical <- genie_clinical %>% 
+  mutate(sample_id_clean = gsub("GENIE-","", SAMPLE_ID))
+genie_clinical_f <- genie_clinical %>% 
+  filter(!gsub("MSK-","",sample_id_clean) %in% c(msk2017_clin$SAMPLE_ID, msk_immuno_clinical$SAMPLE_ID, msk_met_clinical$SAMPLE_ID))
+
+genie_mut <- genie %>% 
+  filter(Tumor_Sample_Barcode %in% genie_clinical_f$SAMPLE_ID)
+
+#process mutations
+genie_mut <- create_muts(genie_mut %>% filter(Reference_Allele != Tumor_Seq_Allele2))
+
+mut_num_per_sample_genie <- as.data.frame(table(genie_mut$Tumor_Sample_Barcode))
+```
+
+```{r predicting GENIE}
+preds_agg_genie_all_list <- cos_pred_fun(sig_labels, 
+                                         unique(genie_mut$Tumor_Sample_Barcode), 
+                                         genie_mut,
+                                         creating_muts = FALSE, 
+                                         vep = TRUE, 
+                                         emb_len = ncol(embeddings))
+
+preds_agg_genie_all <- preds_agg_genie_all_list[[3]]
+preds_agg_genie_all <- add_pred(preds_agg_genie_all) %>% 
+  left_join(mut_num_per_sample_genie, by = c("sample"="Var1")) %>%
+  left_join(genie_clinical_f[,c("SAMPLE_ID","CANCER_TYPE")], by = c("sample"="SAMPLE_ID"))
+```
+
+#GENIE mutation categories
+```{r}
+
+preds_agg_genie_all_mutCat <- preds_agg_genie_all %>%
+  mutate(mutCat = ifelse(Freq < 4, "1-3","else"))
+
+preds_agg_genie_all_mutCat$mutCat <- ifelse(preds_agg_genie_all_mutCat$Freq > 3 &
+                                              preds_agg_genie_all_mutCat$Freq < 8, 
+                                            "4-7",preds_agg_genie_all_mutCat$mutCat)
+
+preds_agg_genie_all_mutCat$mutCat <- ifelse(preds_agg_genie_all_mutCat$Freq > 7 &
+                                              preds_agg_genie_all_mutCat$Freq < 13, 
+                                            "8-12",preds_agg_genie_all_mutCat$mutCat)
+
+preds_agg_genie_all_mutCat$mutCat <- ifelse(preds_agg_genie_all_mutCat$Freq > 12 &
+                                              preds_agg_genie_all_mutCat$Freq < 21, 
+                                            "13-20",preds_agg_genie_all_mutCat$mutCat)
+
+preds_agg_genie_all_mutCat$mutCat <- ifelse(preds_agg_genie_all_mutCat$Freq > 20, 
+                                            ">20",preds_agg_genie_all_mutCat$mutCat)
+
+```
+
+```{r}
+tiff("figures/genie_mut_num_categories.tiff", res = 300, width = 640, height = 640)
+ggplot(preds_agg_genie_all_mutCat, aes(x=factor(mutCat, levels = c("1-3","4-7","8-12","13-20",">20")))) + 
+  geom_bar(width = 0.95) + theme_classic() + xlab("Number of mutations") + 
+  scale_y_continuous("Number of samples",expand = c(0, 0)) + 
+  geom_text(stat='count', aes(label=..count..), hjust = 0.5, vjust=1.3, angle=0, color="white", size = 3) + 
+  theme(text = element_text(face = "bold", size = 12),
+        axis.text.y = element_blank(),
+        plot.margin = margin(0,0.0,0,0, "cm"))
+dev.off()
+```
+
+#sig prop per cancer type
+```{r}
+num_per_cancer_type_genie <- as.data.frame(table(preds_agg_genie_all$CANCER_TYPE))
+toplot <- preds_agg_genie_all %>% 
+  filter(pred != "other") %>%
+  filter(CANCER_TYPE %in% num_per_cancer_type_genie$Var1[num_per_cancer_type_genie$Freq > 100]) %>%
+  filter(Freq > 3)
+
+a <- preds_agg_genie_all %>% 
+  filter(CANCER_TYPE %in% levels & pred !="other" & Freq > 3) %>%
+  ggplot(
+    aes(x=factor(`CANCER_TYPE`, levels = levels), fill=pred)) + geom_bar(position = "fill") + 
+  scale_fill_manual(values=c("#55DDE0", "#33658A", "#C77CFF", "#F6AE2D", "#F26419", "#999999",
+                               "skyblue2", "#F8766D","#00A9FF")) +
+  scale_y_continuous(name = NULL, expand = c(0, 0)) + xlab(NULL)+
+  theme_classic() + theme(
+    legend.title = element_blank(),
+    plot.margin = margin(0,0.0,0,0, "cm"),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.3)
+    ) + 
+  coord_flip()
+```
+
+#high conf (80%) for 1-3 mutations
+```{r}
+genie_preds_raw <- read.csv("preds_GENIE_all_raw_130522.csv", row.names = 1)
+
+for(i in 1:nrow(genie_preds_raw)){
+  genie_preds_raw[i, 2:ncol(genie_preds_raw)] <-
+    ifelse(as.numeric(genie_preds_raw[i,2:ncol(genie_preds_raw)]) == 
+             max(as.numeric(genie_preds_raw[i,2:ncol(genie_preds_raw)])) &
+             max(as.numeric(genie_preds_raw[i,2:ncol(genie_preds_raw)])) > 0.8,
+           "Yes","No")
+}
+
+genie_preds_raw <- add_pred(genie_preds_raw) %>% 
+  left_join(mut_num_per_sample_genie, by = c("sample"="Var1")) %>%
+  left_join(genie_clinical_f[,c("SAMPLE_ID","CANCER_TYPE")], by = c("sample"="SAMPLE_ID"))
+```
+
+```{r}
+b <- ggplot(genie_preds_raw %>% filter(CANCER_TYPE %in% levels & pred !="other" & Freq < 4 & Freq >1), 
+       aes(x=factor(`CANCER_TYPE`, levels = levels), fill=pred)) + geom_bar(position = "fill") + 
+    scale_fill_manual(values=c("#55DDE0", "#33658A", "#C77CFF", "#F26419", "#999999",
+                               "skyblue2", "#F8766D","#00A9FF")) +
+    scale_y_continuous(name = NULL, expand = c(0, 0)) + xlab(NULL)+
+    theme_classic() + theme(
+        plot.margin = margin(0,0.0,0,0, "cm"),
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.3)
+    ) + 
+    coord_flip()
+
+c <- ggplot(genie_preds_raw %>% filter(CANCER_TYPE %in% levels & pred !="other" & Freq < 2), 
+       aes(x=factor(`CANCER_TYPE`, levels = levels), fill=pred)) + geom_bar(position = "fill") + 
+    scale_fill_manual(values=c("#55DDE0", "#33658A", "#C77CFF", "#F26419", "#999999",
+                               "skyblue2", "#F8766D","#00A9FF")) +
+    scale_y_continuous(name = NULL, expand = c(0, 0)) + xlab(NULL)+
+    theme_classic() + theme(
+        plot.margin = margin(0,0.0,0,0, "cm"),
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.3)
+    ) + 
+    coord_flip()
+```

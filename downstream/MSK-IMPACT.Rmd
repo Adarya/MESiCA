@@ -1,0 +1,268 @@
+---
+title: "Predictions of MESiCA in MSK-IMPACT and MSK-ICI samples"
+author: "Adar Yaacov"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tibble)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(survminer)
+library(survival)
+source("utils.R")
+```
+
+#utils and loading data
+```{r}
+proj = "tcga_1536_200"
+
+fd <- read.csv(sprintf("../sig_label_%s_feature_dict.csv",proj)) %>% arrange(X0)
+pm <- read.csv(sprintf("../sig_label_%s_patient_mapping.csv",proj))
+p2c <- read.csv(sprintf("../sig_label_%s_pattern2col.csv",proj)) %>% arrange(X0)
+embeddings <- read.csv(sprintf("../sig_label_%s_embeddings.csv",proj))[,-1]
+rownames(embeddings) <- fd$X
+rownames(embeddings)[1:1536] <- p2c$X
+```
+
+Predicting signatures in MSK-IMPACT 994 samples from Zehir et al.
+```{r}
+nat_med_2017_annotations <- readxl::read_excel("../data/nat_med_2017_sup.xlsx", sheet = 7)
+
+mut <- read.table("../data/msk_impact_2017/data_mutations.txt", quote = "", sep = "\t", header = T)[,1:16]
+mut <- create_muts(mut[mut$Reference_Allele != mut$Tumor_Seq_Allele2,])
+mut_snv <- mut %>% filter(Variant_Type == "SNP")
+```
+
+```{r}
+nat_med_preds <- cos_pred_fun_efficient(sig_names = sig_labels, 
+                                        sample_names = unique(nat_med_2017_annotations$SAMPLE_ID), 
+                                        mut = mut_snv, 
+                                        emb_len = ncol(embeddings), 
+                                        emb = embeddings, 
+                                        creating_muts = F,
+                                        vep = T, 
+                                        sim_num = 0.6)
+
+nat_med_preds_label <- nat_med_preds[[3]] %>% 
+  left_join(nat_med_2017_annotations[,c("SAMPLE_ID","Signature")], by=c("sample"="SAMPLE_ID"))
+
+nat_med_preds_label <- confmat_preds(nat_med_preds_label %>% filter(!is.na(APOBEC)))
+
+table(nat_med_preds_label$Signature, nat_med_preds_label$pred)
+
+nat_med_preds_label$pred_c <- nat_med_preds_label$pred
+nat_med_preds_label$pred_c[nat_med_preds_label$pred %in% c("Clock_SBS1","Clock_SBS5")] <- "Ageing"
+nat_med_preds_label$pred_c[nat_med_preds_label$pred %in% c("Tobacco")] <- "Smoking"
+table(nat_med_preds_label$Signature, nat_med_preds_label$pred_c)
+
+natmed2017_confMat <- caret::confusionMatrix(
+  as.factor(nat_med_preds_label$pred_c[!nat_med_preds_label$Signature %in% c("Other", "TMZ","BRCA1/2") & 
+                                         !nat_med_preds_label$pred_c %in% c("HRD","No prediction")]),
+  as.factor(nat_med_preds_label$Signature[!nat_med_preds_label$Signature %in% c("Other", "TMZ","BRCA1/2") & 
+                                            !nat_med_preds_label$pred_c %in% c("HRD","No prediction")]))
+```
+
+predicting all MSK-IMPACT 2017 samples 
+```{r MSK-IMPACT data loading}
+msk2017_clin <- read.csv("../data/msk_impact_2017/data_clinical_sample.csv", 
+                           check.names = F, header = T)
+msk2017_clin <- msk2017_clin %>% left_join(read.csv("../data/msk_impact_2017/data_clinical_patient.csv", check.names = F, header = T),by = "ן»¿PATIENT_ID")
+colnames(msk2017_clin)[1] <- "PATIENT_ID"
+msk2017_clin <- msk2017_clin %>%
+  mutate(OS = as.numeric(substr(OS_STATUS,1,1)))
+```
+
+```{r MSK-IMPACT predicting}
+mut_num_per_sample <- as.data.frame(table(mut_snv$Tumor_Sample_Barcode))
+preds_agg_mskcc_all_list <- cos_pred_fun(sig_labels, 
+                                         unique(mut_snv$Tumor_Sample_Barcode), 
+                                         mut_snv,
+                                         creating_muts = FALSE, 
+                                         vep = TRUE, 
+                                         emb_len = ncol(embeddings))
+
+preds_agg_mskcc_all <- preds_agg_mskcc_all_list[[3]]
+
+preds_agg_mskcc_all$pred <- "No prediction"
+for(i in 1:nrow(preds_agg_mskcc_all)){
+  for(j in 2:10){
+    if(preds_agg_mskcc_all[i,j] == "Yes"){
+      preds_agg_mskcc_all$pred[i] <- colnames(preds_agg_mskcc_all)[j]
+    }
+  }
+}
+
+#4 mutations and above
+preds_agg_mskcc_all_above3 <- preds_agg_mskcc_all %>% 
+  filter(sample %in% mut_num_per_sample$Var1[mut_num_per_sample$Freq > 3]) %>%
+  left_join(msk2017_clin[,c("CANCER_TYPE","SAMPLE_ID")], by=c("sample"="SAMPLE_ID"))
+
+preds_agg_mskcc_all_per_cancer <- as.data.frame(table(preds_agg_mskcc_all_above3$CANCER_TYPE, preds_agg_mskcc_all_above3$pred))
+colnames(preds_agg_mskcc_all_per_cancer) <- c("Cancer Type", "Sig", "Freq")
+
+
+ggplot(preds_agg_mskcc_all_per_cancer %>% 
+         filter(`Cancer Type` %in% # cancer types with > 50 samples
+                  c("Skin Cancer, Non-Melanoma", "Melanoma", "Bladder Cancer", "Breast Cancer","Head and Neck Cancer", "Non-Small Cell Lung Cancer", "Small Cell Lung Cancer", "Ovarian Cancer","Thyroid Cancer","Prostate Cancer","Soft Tissue Sarcoma","Colorectal Cancer", "Esophagogastric Cancer","Glioma","Endometrial Cancer", "Pancreatic Cancer", "Hepatobiliary Cancer", "Renal Cell Carcinoma","Mature B-Cell Neoplasms")),
+       aes(x=factor(`Cancer Type`,
+                    levels = c("Skin Cancer, Non-Melanoma", "Melanoma", "Bladder Cancer", "Breast Cancer","Head and Neck Cancer", "Non-Small Cell Lung Cancer", "Small Cell Lung Cancer", "Ovarian Cancer","Thyroid Cancer","Prostate Cancer","Soft Tissue Sarcoma","Colorectal Cancer","Esophagogastric Cancer","Glioma","Endometrial Cancer", "Pancreatic Cancer","Hepatobiliary Cancer", "Renal Cell Carcinoma","Mature B-Cell Neoplasms")), 
+           y=Freq, fill=Sig)) + geom_col(position = "fill") + 
+  scale_fill_manual(values=c("#55DDE0", "#33658A", "#C77CFF", "#F6AE2D", "#F26419", "#999999",
+                                       "skyblue2", "#F8766D","#00A9FF")) + 
+  scale_y_continuous(expand = c(0, 0)) +
+  theme_classic() + theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.3)
+  )
+
+```
+
+# MSK-ICI 
+```{r}
+
+msk_immuno_clinical <-left_join(
+  read.table("../data/tmb_mskcc_2018/data_clinical_patient.txt", header = T, sep = "\t", check.names = F, quote = ""), 
+  read.table("../data/tmb_mskcc_2018/data_clinical_sample.txt", header = T, sep = "\t", check.names = F, quote = ""),
+  by ="PATIENT_ID")
+
+msk_immuno_mut <- read.table("../data/tmb_mskcc_2018/data_mutations.txt", header = T, sep = "\t", check.names = F, quote = "")
+mut_msk_immuno <- create_muts(msk_immuno_mut[, 1:18])
+
+immuno_mut_num_per_sample <- as.data.frame(table(mut_msk_immuno$Tumor_Sample_Barcode))
+table(immuno_mut_num_per_sample$Freq > 3)
+
+msk_immuno_preds <- cos_pred_fun_efficient(sig_names = sig_labels, sample_names = unique(mut_msk_immuno$Tumor_Sample_Barcode),
+                              mut = mut_msk_immuno, emb_len = ncol(embeddings), emb = embeddings, creating_muts = F,
+                              vep = T, sim_num = 0.6)
+
+# msk_immuno_preds_label <- confmat_preds(preds = msk_immuno_preds[[3]], sig_col = 11, rounds = F, filt = F)
+
+msk_immuno_preds_label <- add_pred(msk_immuno_preds[[3]])
+msk_immuno_preds_label_type <- can_type_add(msk_immuno_preds_label, msk_immuno_clinical)[[1]]
+msk_immuno_preds_label_sig_per_type <- can_type_add(msk_immuno_preds_label, msk_immuno_clinical)[[2]]
+
+```
+
+# survival analysis in MSK-ICI melanoma, hnsc and nsclc
+```{r}
+msk_immuno_clinical_f_s <- msk_immuno_clinical %>% 
+  filter(SAMPLE_ID %in% immuno_mut_num_per_sample$Var1[immuno_mut_num_per_sample$Freq > 3])
+
+msk_immuno_clinical_f_s$OS <- as.numeric(substr(msk_immuno_clinical_f_s$OS_STATUS,1,1))
+
+msk_immuno_clinical_f_s <- msk_immuno_clinical_f_s %>% left_join(
+  msk_immuno_preds_label, by = c("SAMPLE_ID"="sample"))
+
+msk_immuno_clinical_f_s <- msk_immuno_clinical_f_s[!is.na(msk_immuno_clinical_f_s$APOBEC),]
+
+msk_immuno_clinical_f_s <- msk_immuno_clinical_f_s %>% left_join(nat_med_2017_annotations[,c("Signature","SAMPLE_ID")], by = c("SAMPLE_ID"))
+msk_immuno_clinical_f_s$uv_natMed <- as.factor(ifelse(msk_immuno_clinical_f_s$Signature =="UV", 1,0))
+msk_immuno_clinical_f_s$uv_natMed[is.na(msk_immuno_clinical_f_s$uv_natMed)] <- 0
+
+mela_surv <- ggsurvplot(
+      survfit(Surv(OS_MONTHS, OS) ~ UV, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Melanoma")), # survfit object with calculated statistics.
+      size = 1.5,
+      pval = T,             # show p-value of log-rank test.
+      conf.int = F,         # show confidence intervals for 
+      palette = c("orange", "skyblue"),#  "blue"),
+      xlab = "Time in months",   # customize X axis label.
+      ggtheme = theme_classic(base_size = 25, ), # customize plot and risk table with a theme.
+      legend.labs = c("UV-", "UV+"),
+      conf.int.style = "step",  # customize style of confidence intervals
+    )
+mela_surv
+
+#multivariate 
+msk_immuno_clinical_f_s$TMB <- msk_immuno_clinical_f_s$TMB_NONSYNONYMOUS
+mv <- coxph(Surv(OS_MONTHS, OS) ~ UV + TMB + SAMPLE_TYPE + DRUG_TYPE, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Melanoma"))
+
+mela_surv_multi<-ggforest(mv, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Melanoma"), fontsize = 1)
+
+mela_survzehir <- ggsurvplot(
+      survfit(Surv(OS_MONTHS, OS) ~ uv_natMed, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Melanoma")), # survfit object with calculated statistics.
+      size = 1.5,
+      pval = T,             # show p-value of log-rank test.
+      conf.int = F,         # show confidence intervals for 
+      palette = c("orange", "skyblue"),#  "blue"),
+      xlab = "Time in months",   # customize X axis label.
+      ggtheme = theme_classic(base_size = 25, ), # customize plot and risk table with a theme.
+      legend.labs = c("UV-", "UV+"),
+      conf.int.style = "step",  # customize style of confidence intervals
+    )
+
+#multivariate 
+mv <- coxph(Surv(OS_MONTHS, OS) ~ uv_natMed + TMB + SAMPLE_TYPE + DRUG_TYPE, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Melanoma"))
+
+mela_surv_multi_zehir <- ggforest(mv, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Melanoma"), fontsize = 1)
+
+#comp_zehir_mesica_oneplot
+comp_zehir_mesica_oneplot <- ggsurvplot(
+    survfit(Surv(OS_MONTHS, OS) ~ uv_natMed + UV, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Melanoma")), # survfit object with calculated statistics.
+    size = 1.5,
+    pval = T,             # show p-value of log-rank test.
+    conf.int = F,         # show confidence intervals for 
+    xlab = "Time in months",   # customize X axis label.
+    ggtheme = theme_classic(base_size = 25, ), # customize plot and risk table with a theme.
+    legend.labs = c("None", "MESiCA", "Zehir", "Both"),
+    conf.int.style = "step",  # customize style of confidence intervals
+)
+
+```
+
+apobec surv hnsc
+```{r}
+surv_apo <- ggsurvplot(
+      survfit(Surv(OS_MONTHS, OS) ~ APOBEC, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Head and Neck Cancer")), # survfit object with calculated statistics.
+      size = 1.5,
+      pval = T,             # show p-value of log-rank test.
+      conf.int = F,         # show confidence intervals for 
+      palette = c("orange", "skyblue"),#  "blue"),
+      xlab = "Time in months",   # customize X axis label.
+      ggtheme = theme_classic(base_size = 25, ), # customize plot and risk table with a theme.
+      legend.title="",
+      # risk.table = T,
+      legend.labs = c("APOBEC-", "APOBEC+"), 
+      conf.int.style = "step",  # customize style of confidence intervals
+    )
+surv_apo
+#multivariate 
+mv <- coxph(Surv(OS_MONTHS, OS) ~ APOBEC + TMB + SAMPLE_TYPE + DRUG_TYPE, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Head and Neck Cancer"))
+
+apo_surve_multi_immun <- ggforest(mv, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Head and Neck Cancer"), fontsize = 1)
+apo_surve_multi_immun
+
+```
+
+tobacco surv nsclc
+```{r}
+msk_immuno_clinical_f_s <- msk_immuno_clinical_f_s %>% 
+  filter(SAMPLE_ID %in% immuno_mut_num_per_sample$Var1[immuno_mut_num_per_sample$Freq > 11])
+
+surv_tbc <- ggsurvplot(
+      survfit(Surv(OS_MONTHS, OS) ~ Tobacco, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Non-Small Cell Lung Cancer")), # survfit object with calculated statistics.
+      size = 1.5,
+      pval = T,             # show p-value of log-rank test.
+      conf.int = F,         # show confidence intervals for 
+      palette = c("orange", "skyblue"),#  "blue"),
+      xlab = "Time in months",   # customize X axis label.
+      ggtheme = theme_classic(base_size = 25, ), # customize plot and risk table with a theme.
+      legend.title="",
+      # risk.table = T,
+      legend.labs = c("Tobacco-", "Tobacco+"), 
+      conf.int.style = "step",  # customize style of confidence intervals
+    )
+surv_tbc
+
+#multivariate 
+mv <- coxph(Surv(OS_MONTHS, OS) ~ Tobacco + 
+              TMB + 
+              SAMPLE_TYPE, # +
+              # DRUG_TYPE,
+            data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Non-Small Cell Lung Cancer"))
+
+tbc_surve_multi_immun <- ggforest(mv, data = msk_immuno_clinical_f_s %>% filter(CANCER_TYPE == "Non-Small Cell Lung Cancer"), fontsize = 1)
+
+tbc_surve_multi_immun
+
+```
