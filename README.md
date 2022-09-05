@@ -3,7 +3,7 @@
 This repository contains code and custom scripts for the manuscript titled "Mutational Signatures identification in clinical-setting assays using neural embedding-based representations". 
 
 MESiCA is a tool for identifying the dominant mutational signature in clinical-setting gene panels, even with only a few mutations available. 
-This repository contains [MESiCA development](#Model) and [Validation schemes and downstream anayses](#Downstream). 
+This repository contains [MESiCA development](#Model) and [Validation schemes and downstream analyses](#Downstream). 
 
 <a name="Model"/>
 
