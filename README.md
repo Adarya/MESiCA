@@ -9,7 +9,7 @@ This repository contains [MESiCA development](#Model) and [Validation schemes an
 
 # Model training
 In order to create representations, the main function to run is train.py. This script takes as input mutational classification by penta-nucleotide (1,536 possibilities), as well as sample tag, cancer type, and dominant mutational signature. 
-The model creates representations for each entity, in such manner that related entities get closer representations (Mathematically) than non-related entities. Please refer to the manuscript for a detailed description. 
+The model creates representations for each entity, in such manner that related entities get closer representations (mathematically) than non-related entities. Please refer to the manuscript for a detailed description. 
 The output of train.py is representations for each mutational signature, mutation class, cancer type and sample tag.
 
 The overall scheme and code for creating representations was adopted and modified from [MutSpace](https://github.com/ma-compbio/MutSpace).
