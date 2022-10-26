@@ -18,7 +18,7 @@ source("utils.R")
 
 #utils and loading data
 ```{r}
-proj = "tcga_1536_200"
+proj = "demo"
 
 fd <- read.csv(sprintf("../sig_label_%s_feature_dict.csv",proj)) %>% arrange(X0)
 pm <- read.csv(sprintf("../sig_label_%s_patient_mapping.csv",proj))
