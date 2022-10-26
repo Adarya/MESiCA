@@ -10,7 +10,7 @@ from itertools import islice
 
 def get_seq_mapping():
     """convert mutation type to integer (index)"""
-    mut_mapping = {'C->A': 0, 'C->G': 1, 'C->T': 2, 'T->A': 3, 'T->C': 4, 'T->G': 5}
+    mut_mapping = {'C>A': 0, 'C>G': 1, 'C>T': 2, 'T>A': 3, 'T>C': 4, 'T>G': 5}
     nuk_mapping = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
     return mut_mapping, nuk_mapping
 
