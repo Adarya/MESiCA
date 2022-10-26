@@ -32,8 +32,11 @@ git clone https://github.com/Adarya/MESiCA
 ```
 
 ### Running
-+ In order to create representations, the main function to run is **train.py**. 
-+ This script takes as input mutational classification by penta-nucleotide (1,536 possibilities), as well as sample tag, cancer type, and dominant mutational signature. A processed demo data is available in the repository.  
++ In order to create representations, the main function to run is **train.py**. for example:
+```
+python train.py --name=demo --data_path=demo_data --temp=1.0 --seed 123 --emb_dim=200 --n_negative 30 --epoches 30
+```
++ This script takes as input mutational classification by penta-nucleotide (1,536 possibilities), as well as sample tag, cancer type, and dominant mutational signature. A processed demo data is available in the repository.
 + The model creates representations for each entity, in such manner that related entities get closer representations (mathematically) than non-related entities. Please refer to the manuscript for a detailed description. 
 + The output of train.py is representations for each mutational signature, mutation class, cancer type and sample tag.
 
