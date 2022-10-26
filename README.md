@@ -36,7 +36,7 @@ git clone https://github.com/Adarya/MESiCA
 ```
 python train.py --name=demo --data_path=demo_data --temp=1.0 --seed 123 --emb_dim=200 --n_negative 30 --epoches 30
 ```
-+ This script takes as input mutational classification by penta-nucleotide (1,536 possibilities), as well as sample tag, cancer type, and dominant mutational signature. A processed demo data is available in the repository.
++ This script takes as input mutational classification by penta-nucleotide (1,536 possibilities), as well as sample tag, cancer type, and dominant mutational signature. A processed demo data, which is a subset of the TCGA, is available in the repository.
 + The model creates representations for each entity, in such manner that related entities get closer representations (mathematically) than non-related entities. Please refer to the manuscript for a detailed description. 
 + The output of train.py is representations for each mutational signature, mutation class, cancer type and sample tag.
 
@@ -56,6 +56,9 @@ Once the above R environment and associated packages are installed, and the repo
 ### Running
 + The outputs of the training are the inputs for the **model_output_to_csv.ipynb**, which produce .csv files
 + These files are then the inputs for predicting the dominant signature in new samples, as well as for all downstream tasks.
+    + In each .Rmd file, the first step is to produce a processed dataframe of all embeddings 
+    + For convinence, the demo directory contains the embedding matrix produced for the demo data
+    + Please note that the demo embeddings produced by a subset of the TCGA samples and therefore do not represent the embeddings used in the MESiCA manuscript. 
 
 # Notes
 - This repository will become publicly available once the manuscript is published
