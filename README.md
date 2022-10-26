@@ -28,7 +28,7 @@ A standard computer with enough RAM to support the in-memory operations.
 ### Installation
 Once the above Python and associated packages are installed, the code can be used
 ```
-git clone https://github.com/Adary/MESiCA
+git clone https://github.com/Adarya/MESiCA
 ```
 
 ### Running
