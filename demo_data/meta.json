@@ -1,0 +1,8 @@
+{
+    "uid": 5,
+    "upstream": 0,
+    "downstream": 1,
+    "var_type": 2,
+    "a": [6],
+    "b": [4, 5]
+}
