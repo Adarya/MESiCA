@@ -1,6 +1,6 @@
 # MESiCA
 
-This repository contains code and custom scripts for the manuscript titled "Mutational Signatures identification in clinical-setting assays using neural embedding-based representations". 
+This repository contains code and custom scripts for the manuscript [Cancer mutational signatures identification in clinical assays using neural embedding-based representations](https://doi.org/10.1016/j.xcrm.2024.101608), published at _Cell Reports Medicine_. 
 
 MESiCA is a tool for identifying the dominant mutational signature in clinical-setting gene panels, even with only a few mutations available. 
 This repository contains [MESiCA development](#Model) and [Validation schemes and downstream analyses](#Downstream). 
@@ -61,5 +61,4 @@ Once the above R environment and associated packages are installed, and the repo
     + Please note that the demo embeddings produced by a subset of the TCGA samples and therefore do not represent the embeddings used in the MESiCA manuscript. 
 
 # Notes
-- This repository will become publicly available once the manuscript is published
 - Other supporting data are availabe at [doi.org/10.5281/zenodo.7047369](https://doi.org/10.5281/zenodo.7047369) with restricted access until publication.
