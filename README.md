@@ -16,7 +16,7 @@ This repository contains [MESiCA development](#Model) and [Validation schemes an
 
 ### Software requirements
 1. **Python 3.7.3.** 
-    + **Packages:** pytorch 1.3.1, argparse 1.4.0, json 0.1.1, numpy 1.16.4, tqdm 4.32.1, pandas 1.2.4.
+    + **Packages:** torch 1.3.1, argparse 1.4.0, json 0.1.1, numpy 1.16.4, tqdm 4.32.1, pandas 1.2.4, h5py.
 2. **R 4.1.0.** 
     + **Packages:** BiocManager 1.30.16, ggplot2 3.3.5, caret 6.0.90, dplyr 1.0.8, tibble 3.1.6, rtracklayer 1.52.1, reshape2 1.4.4, Biostrings 2.60.1, plyr 1.8.6, Rsamtools 2.8.0, VariantAnnotation 1.38.0, SomaticSignatures 2.28.0, MutationalPatterns 3.2.0, survival 3.2.11, survminer 0.4.9, BSgenome 1.60.0, gridExtra 2.3, precrec 0.12.9, pheatmap 1.0.12. 
 3. **Jupyter Notebook**
@@ -39,7 +39,7 @@ git clone https://github.com/Adarya/MESiCA
 ### Running
 + In order to create representations, the main function to run is **train.py**. for example:
 ```
-python train.py --name=demo --data_path=demo_data --temp=1.0 --seed 123 --emb_dim=200 --n_negative 30 --epoches 30
+python train.py --name=demo --data_path=demo_data --temp=1.0 --seed 123 --emb_dim=200 --n_negative 30 --epochs 30
 ```
 + This script takes as input mutational classification by penta-nucleotide (1,536 possibilities), as well as sample tag, cancer type, and dominant mutational signature. A processed demo data, which is a subset of the TCGA, is available in the repository.
 + The model creates representations for each entity, in such manner that related entities get closer representations (mathematically) than non-related entities. Please refer to the manuscript for a detailed description. 
