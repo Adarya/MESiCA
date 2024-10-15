@@ -16,9 +16,11 @@ This repository contains [MESiCA development](#Model) and [Validation schemes an
 
 ### Software requirements
 1. **Python 3.7.3.** 
-    + **Packages:** torch 1.3.1, argparse 1.4.0, json 0.1.1, numpy 1.16.4, tqdm 4.32.1, pandas 1.2.4, h5py.
+    + **Packages used in the study (other versions should work as well):**
+        + pytorch 1.3.1, argparse 1.4.0, json 0.1.1, numpy 1.16.4, tqdm 4.32.1, pandas 1.2.4, h5py.
 2. **R 4.1.0.** 
-    + **Packages:** BiocManager 1.30.16, ggplot2 3.3.5, caret 6.0.90, dplyr 1.0.8, tibble 3.1.6, rtracklayer 1.52.1, reshape2 1.4.4, Biostrings 2.60.1, plyr 1.8.6, Rsamtools 2.8.0, VariantAnnotation 1.38.0, SomaticSignatures 2.28.0, MutationalPatterns 3.2.0, survival 3.2.11, survminer 0.4.9, BSgenome 1.60.0, gridExtra 2.3, precrec 0.12.9, pheatmap 1.0.12. 
+    + **Packages used in the study (other versions should work as well):**
+        + BiocManager 1.30.16, ggplot2 3.3.5, caret 6.0.90, dplyr 1.0.8, tibble 3.1.6, rtracklayer 1.52.1, reshape2 1.4.4, Biostrings 2.60.1, plyr 1.8.6, Rsamtools 2.8.0, VariantAnnotation 1.38.0, SomaticSignatures 2.28.0, MutationalPatterns 3.2.0, survival 3.2.11, survminer 0.4.9, BSgenome 1.60.0, gridExtra 2.3, precrec 0.12.9, pheatmap 1.0.12. 
 3. **Jupyter Notebook**
 
 ### OS requirements
